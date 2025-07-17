@@ -3,7 +3,7 @@
 <html lang="ar">
 <head>
   <meta charset="UTF-8" />
-  <title>مراقبة الدورة الرقمية - Ahmad × ChatGPT</title>
+  <title>مراقبة نهاية الدورة الرقمية للأسهم السعودية والأمريكية</title>
   <style>
     body {
       font-family: 'Cairo', sans-serif;
@@ -11,8 +11,6 @@
       padding: 20px;
       direction: rtl;
       text-align: center;
-      user-select: none;
-      -webkit-user-select: none;
     }
     h2 { color: #00695c; }
     table {
@@ -30,19 +28,28 @@
       color: white;
     }
     .alert { background: #fff3cd; color: #856404; font-weight: bold; }
+    .good { color: green; font-weight: bold; }
+    .bad { color: red; font-weight: bold; }
     #loading { color: #00695c; font-weight: bold; margin-top: 10px; }
     #count { margin-top: 10px; font-weight: bold; color: #004d40; }
-    footer {
-      margin-top: 40px;
-      color: gray;
-      font-size: 12px;
+    button {
+      margin-top: 15px;
+      padding: 10px 20px;
+      font-size: 16px;
+      background: #00796b;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+    button:hover {
+      background: #004d40;
     }
   </style>
 </head>
 <body>
-  <h2>🚀 مشروع مشترك: Ahmad × ChatGPT</h2>
-  <p style="color: #555;">مراقبة الأسهم القريبة من نهاية دورة 90 أو 142857 (سعودية + أمريكية)</p>
-  <div id="loading">🔄 جاري تحليل السوق...</div>
+  <h2>📈 الأسهم القريبة من نهاية دورة <span dir="ltr">142857</span> أو <span dir="ltr">90</span></h2>
+  <div id="loading">🔄 جاري التحميل...</div>
   <div id="count"></div>
   <table id="results">
     <thead>
@@ -51,64 +58,131 @@
         <th>الرمز</th>
         <th>السوق</th>
         <th>السعر</th>
-        <th>تحليل رقمي</th>
+        <th>فرق 142857</th>
+        <th>فرق 90</th>
+        <th>نسبة التقدم</th>
         <th>تنبيه</th>
       </tr>
     </thead>
     <tbody></tbody>
   </table>
-  <footer>
-    <img src="https://upload.wikimedia.org/wikipedia/commons/0/04/ChatGPT_logo.svg" width="24" />
-    نموذج محفوظ - Ahmad + ChatGPT - Powered by OpenAI
-  </footer>
+
+  <button onclick="saveData()">💾 حفظ النتائج الحالية</button>
+  <button onclick="copyToClipboard()">📋 نسخ النتائج كنص</button>
+  <audio id="alertSound" src="https://www.soundjay.com/buttons/beep-07.wav" preload="auto"></audio>
+
   <script>
-    const us = ["AAPL", "MSFT", "TSLA", "NVDA", "AMZN", "CNSP"];
-    const sa = ["2222.SR", "2010.SR", "1211.SR", "TADAWUL.SR"];
-    const all = us.map(s => ({ s, m: "🇺🇸" })).concat(sa.map(s => ({ s, m: "🇸🇦" })));
+    const usSymbols = [
+      'AAPL','MSFT','TSLA','NVDA','AMZN','META','GOOGL','NFLX','INTC','AMD',
+      'BABA','CRM','ORCL','CSCO','QCOM','ADBE','AVGO','TXN','PYPL','SHOP',
+      'ZM','UBER','ABNB','PLTR','ROKU','COIN','SQ','MRNA','PFE','JNJ',
+      'XOM','CVX','BA','GE','GM','F','T','VZ','WMT','COST',
+      'NKE','SBUX','MCD','DIS','PEP','KO','WFC','BAC','GS','JPM','CNSP'
+    ];
 
-    const b1 = 142857, b2 = 90;
-    const results = [];
+    const saSymbols = [
+      '2222','2010','1211','7010','2380','2020','3030','TADAWUL',
+      '1050','1040','1060','1080','1140','1150','8230','8170','8010','8210','8310','8280',
+      '6050','6020','6010','4002','4260','4080','4200','4013','4008','4050'
+    ];
 
-    function obf(p) {
-      let r1 = Math.abs(p - Math.round(p / b1) * b1);
-      let r2 = Math.abs(p - Math.round(p / b2) * b2);
-      let near = r1 < 1 || r2 < 1;
-      return { r1: r1.toFixed(2), r2: r2.toFixed(2), near };
-    }
+    const allSymbols = usSymbols.map(s => ({ symbol: s, market: '🇺🇸 أمريكا' }))
+      .concat(saSymbols.map(s => ({ symbol: s + ".SR", market: '🇸🇦 السعودية' })));
 
-    async function fetchPrice(sym) {
+    const base142857 = 142857;
+    const base90 = 90;
+    const savedData = [];
+
+    async function fetchData(symbol) {
       try {
-        const res = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${sym}`);
+        const res = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${symbol}`);
         const data = await res.json();
-        return data?.chart?.result?.[0]?.meta?.regularMarketPrice || null;
-      } catch {
+        const price = data?.chart?.result?.[0]?.meta?.regularMarketPrice;
+        return price ? { symbol, price } : null;
+      } catch (err) {
+        console.warn('فشل في جلب البيانات:', symbol);
         return null;
       }
     }
 
     async function analyze() {
-      const tbody = document.querySelector("#results tbody");
-      let i = 1, found = 0;
-      for (const { s, m } of all) {
-        const p = await fetchPrice(s);
-        if (!p) continue;
-        const { r1, r2, near } = obf(p);
-        if (near) found++;
-        const row = document.createElement("tr");
-        row.innerHTML = `
-          <td>${i++}</td>
-          <td>${s.replace(".SR", "")}</td>
-          <td>${m}</td>
-          <td>${p.toFixed(2)}</td>
-          <td>↯ ${r1} / ${r2}</td>
-          <td class="alert">${near ? "📌 قريب" : ""}</td>`;
-        tbody.appendChild(row);
+      const table = document.querySelector('#results tbody');
+      const countDiv = document.getElementById('count');
+      let matchCount = 0;
+      let counter = 1;
+
+      for (const { symbol, market } of allSymbols) {
+        const data = await fetchData(symbol);
+        if (!data || !data.price) continue;
+
+        const price = data.price;
+        const diff142857 = Math.abs(price - Math.round(price / base142857) * base142857);
+        const diff90 = Math.abs(price - Math.round(price / base90) * base90);
+        const percent = ((price % base142857) / base142857 * 100);
+
+        const isNear = diff142857 < 1 || diff90 < 1 || percent >= 99;
+
+        if (isNear) {
+          document.getElementById("alertSound").play();
+          matchCount++;
+          const rowData = {
+            symbol: symbol.replace('.SR', ''),
+            market,
+            price: price.toFixed(2),
+            diff142857: diff142857.toFixed(2),
+            diff90: diff90.toFixed(2),
+            percent: percent.toFixed(2) + '%'
+          };
+          savedData.push(rowData);
+
+          const row = document.createElement('tr');
+          row.innerHTML = `
+            <td>${counter++}</td>
+            <td>${rowData.symbol}</td>
+            <td>${rowData.market}</td>
+            <td>${rowData.price}</td>
+            <td>${rowData.diff142857}</td>
+            <td>${rowData.diff90}</td>
+            <td>${rowData.percent}</td>
+            <td class="alert">⚠️ قريب من نهاية دورة</td>
+          `;
+          table.appendChild(row);
+        }
       }
-      document.getElementById("count").textContent = `✅ تم العثور على ${found} سهم قريب من نهاية دورة.`;
-      document.getElementById("loading").style.display = "none";
+
+      countDiv.textContent = `✅ تم العثور على ${matchCount} من الأسهم القريبة من نهاية دورة.`;
+      document.getElementById('loading').style.display = 'none';
     }
 
-    setInterval(() => { console.clear(); }, 1000);
+    function saveData() {
+      if (savedData.length === 0) {
+        alert('لا توجد بيانات لحفظها.');
+        return;
+      }
+      const content = JSON.stringify(savedData, null, 2);
+      const blob = new Blob([content], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'cycle-alerts.json';
+      a.click();
+    }
+
+    function copyToClipboard() {
+      if (savedData.length === 0) {
+        alert("لا توجد نتائج لنسخها.");
+        return;
+      }
+
+      const rows = savedData.map((item, idx) =>
+        `${idx + 1}. ${item.symbol} (${item.market}) - السعر: ${item.price} - فرق 142857: ${item.diff142857} - فرق 90: ${item.diff90} - تقدم: ${item.percent}`
+      ).join('\n');
+
+      navigator.clipboard.writeText(rows).then(() => {
+        alert("✅ تم نسخ النتائج إلى الحافظة!");
+      });
+    }
+
     analyze();
   </script>
 </body>
